@@ -1,5 +1,6 @@
 import os
 from collections.abc import Iterator
+from typing import Optional, Union
 
 import dungeons_and_trolls_client as dnt
 from dotenv import load_dotenv
@@ -17,6 +18,7 @@ from dungeons_and_trolls_client.models.dungeonsandtrolls_skill import Dungeonsan
 from dungeons_and_trolls_client.models.dungeonsandtrolls_skill_use import DungeonsandtrollsSkillUse
 from dungeons_and_trolls_client.models.skill_target import SkillTarget
 from dungeons_and_trolls_client.rest import ApiException
+from pydantic import StrictFloat, StrictInt
 
 load_dotenv()
 
@@ -37,24 +39,64 @@ def compute_damage(skill_damage_amount: DungeonsandtrollsAttributes,
 # Chooses free weapon.
 def choose_best_weapon(weapons: Iterator[DungeonsandtrollsItem], character_attributes: DungeonsandtrollsAttributes,
                        budget: int) -> DungeonsandtrollsItem:
-    currentWeapon = None
-    currentDamage = 0
-    for weapon in weapons:
+    current_weapon = None
+    print("Budget: " + str(budget))
+    most_expensive_weapons = sorted(list(weapons), key=(lambda x: x.price), reverse=True)
+    for weapon in most_expensive_weapons:
         weapon: DungeonsandtrollsItem
-        if weapon.price == 0:
-            currentWeapon = weapon
+        print(weapon.name + " Price: " + str(weapon.price) + " Requirements:" + weapon.requirements.to_str())
+        if attributes_matches(weapon.requirements, character_attributes) and weapon.price < budget:
+            current_weapon = weapon
             break
-    if currentWeapon is not None:
-        print("Buying", currentWeapon.name)
-    return currentWeapon
+    if current_weapon is not None:
+        print("Buying", current_weapon.name)
+    return current_weapon
+
+
+def attributes_matches(required: DungeonsandtrollsAttributes, actual: DungeonsandtrollsAttributes) -> bool:
+    return attribute_matches(required.strength, actual.strength) and attribute_matches(required.dexterity,
+                                                                                       actual.dexterity) and attribute_matches(
+        required.intelligence, actual.intelligence) and attribute_matches(required.willpower,
+                                                                          actual.willpower) and attribute_matches(
+        required.constitution, actual.constitution) and attribute_matches(required.life,
+                                                                          actual.life) and attribute_matches(
+        required.stamina, actual.stamina) and attribute_matches(required.mana, actual.mana) and attribute_matches(
+        required.slash_resist, actual.slash_resist) and attribute_matches(required.pierce_resist,
+                                                                          actual.pierce_resist) and attribute_matches(
+        required.fire_resist, actual.pierce_resist) and attribute_matches(required.fire_resist,
+                                                                          actual.fire_resist) and attribute_matches(
+        required.poison_resist, actual.poison_resist) and attribute_matches(required.electric_resist,
+                                                                            actual.electric_resist)
+
+
+def attribute_matches(required: Optional[Union[StrictFloat, StrictInt]],
+                      actual: Optional[Union[StrictFloat, StrictInt]]) -> bool:
+    if required is None:
+        return True
+    if required is not None and actual is None:
+        return False
+    if required > actual:
+        return False
+    else:
+        return True
 
 
 def assign_skill_points(character: DungeonsandtrollsCharacter, api_instance: dnt.DungeonsAndTrollsApi) -> bool:
     if character.skill_points == 0:
         return False
-    attr: DungeonsandtrollsAttributes = DungeonsandtrollsAttributes(stamina=character.skill_points)
+    print("Assigning skill points")
+    skill_points_partial = character.skill_points / 7
+    attr: DungeonsandtrollsAttributes = DungeonsandtrollsAttributes(
+        stamina=skill_points_partial,
+        strength=skill_points_partial,
+        dexterity=skill_points_partial,
+        constitution=skill_points_partial,
+        life=skill_points_partial,
+        slash_resist=skill_points_partial,
+        pierce_resist=skill_points_partial
+    )
     api_instance.dungeons_and_trolls_assign_skill_points(attr)
-    print("Assigning " + str(character.skill_points) + " skill points to stamina")
+    print("Assigning " + str(character.skill_points) + " skill points to " + attr.to_str())
     return True
 
 
@@ -63,6 +105,9 @@ def select_gear(items: list[DungeonsandtrollsItem],
                 character: DungeonsandtrollsCharacter) -> DungeonsandtrollsIdentifiers:
     gear = DungeonsandtrollsIdentifiers()
     gear.ids = []
+    if len(character.equip) > 0:
+        return gear
+    print("Selecting gear")
     equiped = set([equip.id for equip in character.equip])
     weapons = filter(lambda x: x.slot == DungeonsandtrollsItemType.MAINHAND, items)
     armor = filter(lambda x: x.slot in {DungeonsandtrollsItemType.BODY,
@@ -130,7 +175,7 @@ def find_monster(game: DungeonsandtrollsGameState) -> (DungeonsandtrollsMonster,
 
 # Update the monster information, e.g. position if the monster moved recently.
 def update_monster(monster_id: str, game: DungeonsandtrollsGameState) -> (
-DungeonsandtrollsMonster, DungeonsandtrollsCoordinates):
+        DungeonsandtrollsMonster, DungeonsandtrollsCoordinates):
     level: DungeonsandtrollsLevel = game.map.levels[0]
     for obj in level.objects:
         obj: DungeonsandtrollsMapObjects
@@ -196,7 +241,8 @@ def main():
                     skill_damage = compute_damage(skill.damage_amount, game.character.attributes)
                     # fight the monster
                     print("fighting with " + skill.name + "! Damage dealt: " + str(
-                        skill_damage) + " monster life: " + str(monster.life_percentage))
+                        skill_damage) + " monster life: " + str(monster.life_percentage) + " own life: " + str(
+                        game.character.attributes.life))
                     try:
                         api_instance.dungeons_and_trolls_skill(
                             DungeonsandtrollsSkillUse(skillId=skill.id, targetId=monster.id))
