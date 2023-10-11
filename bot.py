@@ -31,7 +31,7 @@ configuration = dnt.Configuration(
 )
 
 
-# Computes dot product for the given wepon and character attritbutes.
+# Computes dot product for the given weapon and character attributes.
 def compute_damage(skill_damage_amount: DungeonsandtrollsAttributes,
                    character_attributes: DungeonsandtrollsAttributes) -> float:
     return sum([weapon_val * getattr(character_attributes, attr_name, 0)
@@ -39,25 +39,50 @@ def compute_damage(skill_damage_amount: DungeonsandtrollsAttributes,
                 if weapon_val])
 
 
-# Chooses free weapon.
+def attribute_boosts_damage(attributes: DungeonsandtrollsAttributes, damage_multiplicator: string):
+    if damage_multiplicator is None:
+        return True
+    if attributes.to_dict()[damage_multiplicator]:
+        return True
+    else:
+        return False
+
+
+def attribute_boost_value(attributes: DungeonsandtrollsAttributes, damage_multiplicator: string) -> int:
+    if damage_multiplicator is None:
+        return -1
+    if attributes.to_dict()[damage_multiplicator]:
+        return attributes.to_dict()[damage_multiplicator]
+    else:
+        return -1
+
+
 def choose_best_item(items: list[DungeonsandtrollsItem], type: DungeonsandtrollsItemType,
-                     character_attributes: DungeonsandtrollsAttributes,
-                     budget: int, damage_type: DungeonsandtrollsDamageType,
-                     skill_target: SkillTarget) -> DungeonsandtrollsItem:
+                     character_attributes: DungeonsandtrollsAttributes, budget: int,
+                     damage_type: DungeonsandtrollsDamageType, skill_target: SkillTarget,
+                     damage_multiplicator: string) -> DungeonsandtrollsItem:
     current_item = None
     print("Budget: " + str(budget))
     filtered_items = filter(lambda x: x.slot == type, items)
-    most_expensive_items = sorted(list(filtered_items), key=(lambda x: x.price), reverse=True)
-    for item in most_expensive_items:
+    sorted_items = filtered_items
+    if damage_multiplicator is None:
+        sorted_items = sorted(list(filtered_items), key=(lambda x: x.price), reverse=True)
+    else:
+        sorted_items = sorted(list(filtered_items),
+                              key=(lambda x: attribute_boost_value(x.attributes, damage_multiplicator)),
+                              reverse=True)
+    for item in sorted_items:
         item: DungeonsandtrollsItem
         if attributes_matches(item.requirements, character_attributes) and item.price < budget and damage_type_matches(
-                item.skills, damage_type) and skill_target_matches(item.skills, skill_target):
+                item.skills, damage_type) and skill_target_matches(item.skills,
+                                                                   skill_target) and attribute_boosts_damage(
+            item.attributes, damage_multiplicator):
             current_item = item
             break
     if current_item is not None:
-        print("Buying " + current_item.name)
+        print("Buying " + current_item.name + " boosting " + current_item.attributes.to_str())
     else:
-        print("No gold left for anything in the shop")
+        print("Can't buy anything")
     return current_item
 
 
@@ -112,13 +137,11 @@ def assign_skill_points(character: DungeonsandtrollsCharacter, api_instance: dnt
         return False
     print("Assigning skill points")
     skill_points_partial = character.skill_points / 10
-    stamina_points = character.skill_points - (skill_points_partial * 6)
+    rest = character.skill_points - (skill_points_partial * 2)
+    main_points = rest / 2
     attr: DungeonsandtrollsAttributes = DungeonsandtrollsAttributes(
-        stamina=stamina_points,
-        strength=skill_points_partial,
-        dexterity=skill_points_partial,
-        constitution=skill_points_partial,
-        life=skill_points_partial,
+        stamina=main_points,
+        life=main_points,
         slash_resist=skill_points_partial,
         pierce_resist=skill_points_partial
     )
@@ -127,7 +150,12 @@ def assign_skill_points(character: DungeonsandtrollsCharacter, api_instance: dnt
     return True
 
 
-# Optimization function to select the best gear for the player based on budget.
+def calculate_damage_multiplicator(damage_amount: DungeonsandtrollsAttributes) -> string:
+    for key in damage_amount.to_dict().keys():
+        if damage_amount.to_dict()[key]:
+            return key
+
+
 def select_gear(items: list[DungeonsandtrollsItem],
                 character: DungeonsandtrollsCharacter) -> DungeonsandtrollsIdentifiers:
     gear = DungeonsandtrollsIdentifiers()
@@ -138,23 +166,30 @@ def select_gear(items: list[DungeonsandtrollsItem],
     print("Selecting gear")
     budget = character.money
     item = choose_best_item(items, DungeonsandtrollsItemType.MAINHAND, character.attributes, budget,
-                            DungeonsandtrollsDamageType.SLASH, SkillTarget.CHARACTER)
+                            DungeonsandtrollsDamageType.SLASH, SkillTarget.CHARACTER, None)
+    best_skill = select_damage_skill([item], character.attributes)
+    damage_multiplicator = calculate_damage_multiplicator(best_skill.damage_amount)
+    print("Best skill: " + best_skill.name + " boosted by " + damage_multiplicator)
     if item:
         gear.ids.append(item.id)
         budget = budget - item.price
-    item = choose_best_item(items, DungeonsandtrollsItemType.BODY, character.attributes, budget, None, None)
+    item = choose_best_item(items, DungeonsandtrollsItemType.BODY, character.attributes, budget, None, None,
+                            damage_multiplicator)
     if item:
         gear.ids.append(item.id)
         budget = budget - item.price
-    item = choose_best_item(items, DungeonsandtrollsItemType.LEGS, character.attributes, budget, None, None)
+    item = choose_best_item(items, DungeonsandtrollsItemType.LEGS, character.attributes, budget, None, None,
+                            damage_multiplicator)
     if item:
         gear.ids.append(item.id)
         budget = budget - item.price
-    item = choose_best_item(items, DungeonsandtrollsItemType.HEAD, character.attributes, budget, None, None)
+    item = choose_best_item(items, DungeonsandtrollsItemType.HEAD, character.attributes, budget, None, None,
+                            damage_multiplicator)
     if item:
         gear.ids.append(item.id)
         budget = budget - item.price
-    item = choose_best_item(items, DungeonsandtrollsItemType.NECK, character.attributes, budget, None, None)
+    item = choose_best_item(items, DungeonsandtrollsItemType.NECK, character.attributes, budget, None, None,
+                            damage_multiplicator)
     if item:
         gear.ids.append(item.id)
     return gear
