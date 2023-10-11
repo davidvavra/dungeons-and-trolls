@@ -173,6 +173,13 @@ def find_stairs_to_next_level(game: DungeonsandtrollsGameState) -> Dungeonsandtr
         if (object.is_stairs):
             return object.position
 
+def find_portal(game: DungeonsandtrollsGameState) -> DungeonsandtrollsCoordinates:
+    level: DungeonsandtrollsLevel = (game.map.levels[0])
+    for object in level.objects:
+        object: DungeonsandtrollsMapObjects
+        if (object.portal):
+            return object.position
+
 
 # Find any monster on the current level.
 def find_monster(game: DungeonsandtrollsGameState) -> (DungeonsandtrollsMonster, DungeonsandtrollsCoordinates):
@@ -228,6 +235,11 @@ def main():
                 #print("respawn")
                 #api_instance.dungeons_and_trolls_respawn({})
                 #continue
+
+                portal_pos = find_portal(game)
+                if portal_pos is not None:
+                    api_instance.dungeons_and_trolls_move(portal_pos)
+                    continue
 
                 if monster_pos is None:
                     # locate any monster on current level
