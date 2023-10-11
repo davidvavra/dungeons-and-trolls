@@ -242,7 +242,7 @@ def find_monster(game: DungeonsandtrollsGameState) -> (DungeonsandtrollsMonster,
 
 def find_distance(position: DungeonsandtrollsPosition, map_list: list[DungeonsandtrollsPlayerSpecificMap]) -> int:
     for mapItem in map_list:
-        if mapItem.position == position and mapItem.distance > 0:
+        if mapItem.position == position and mapItem.distance >= 0:
             return mapItem.distance
     return 1000
 
