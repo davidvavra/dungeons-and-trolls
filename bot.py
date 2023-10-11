@@ -48,7 +48,7 @@ def wait_at_stairs_for_others(
         position_x=game.current_position.position_x,
         position_y=game.current_position.position_y
     )
-    if distance(current_coords, stairs) > 2:
+    if distance(current_coords, stairs) > 1:
         return True
 
     print("Near the stairs, looking at others")
@@ -314,14 +314,18 @@ def find_max_portal(game: DungeonsandtrollsGameState) -> DungeonsandtrollsCoordi
 # Find any monster on the current level.
 def find_monster(game: DungeonsandtrollsGameState) -> (DungeonsandtrollsMonster, DungeonsandtrollsCoordinates):
     level: DungeonsandtrollsLevel = (game.map.levels[0])
-    closest_objects = sorted(level.objects, key=(lambda x: find_distance(x.position, level.player_map)))
-    for obj in closest_objects:
+    monster_positions = []
+    for obj in level.objects:
         if not obj.monsters:
             continue
         for monster in obj.monsters:
             monster: DungeonsandtrollsMonster
-            return monster, obj.position
-    return None, None
+            distance = find_distance(obj.position, level.player_map)
+            monster_positions.append((monster, obj.position, distance))
+    if len(monster_positions) == 0:
+        return None, None
+    closest_monster_position = min(monster_positions, key=lambda x: x[2])
+    return closest_monster_position[0], closest_monster_position[1]
 
 
 def find_distance(position: DungeonsandtrollsPosition, map_list: list[DungeonsandtrollsPlayerSpecificMap]) -> int:
@@ -364,7 +368,7 @@ def use_body_skill(game: DungeonsandtrollsGameState, api_instance: DungeonsAndTr
 
 def yell(message: string, api_instance: DungeonsAndTrollsApi):
     try:
-        print(message)
+        print("Yell: " + message)
         api_instance.dungeons_and_trolls_yell(DungeonsandtrollsMessage(text=message))
     except ApiException as e:
         print("Exception when calling DungeonsAndTrollsApi: %s\n" % e)
@@ -401,16 +405,9 @@ def fight(game: DungeonsandtrollsGameState, api_instance: DungeonsAndTrollsApi, 
         print("Exception when calling DungeonsAndTrollsApi: %s\n" % e)
 
 
-last_move = None
-
-
 def move(api_instance: DungeonsAndTrollsApi, position: DungeonsandtrollsPosition):
     try:
-        global last_move
-        if last_move == position:
-            print("Ignoring move")
         api_instance.dungeons_and_trolls_move(position)
-        last_move = position
     except ApiException as e:
         print("Exception when calling DungeonsAndTrollsApi: %s\n" % e)
 
