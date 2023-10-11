@@ -168,8 +168,12 @@ def select_gear(items: list[DungeonsandtrollsItem],
     item = choose_best_item(items, DungeonsandtrollsItemType.MAINHAND, character.attributes, budget,
                             DungeonsandtrollsDamageType.SLASH, SkillTarget.CHARACTER, None)
     best_skill = select_damage_skill([item], character.attributes)
-    damage_multiplicator = calculate_damage_multiplicator(best_skill.damage_amount)
-    print("Best skill: " + best_skill.name + " boosted by " + damage_multiplicator)
+    damage_multiplicator = None
+    if best_skill is not None:
+        damage_multiplicator = calculate_damage_multiplicator(best_skill.damage_amount)
+        print("Best skill: " + best_skill.name + " boosted by " + damage_multiplicator)
+    else:
+        print("Can't find best skill")
     if item:
         gear.ids.append(item.id)
         budget = budget - item.price
