@@ -86,9 +86,10 @@ def assign_skill_points(character: DungeonsandtrollsCharacter, api_instance: dnt
     if character.skill_points == 0:
         return False
     print("Assigning skill points")
-    skill_points_partial = character.skill_points / 7
+    skill_points_partial = character.skill_points / 10
+    stamina_points = character.skill_points - (skill_points_partial * 6)
     attr: DungeonsandtrollsAttributes = DungeonsandtrollsAttributes(
-        stamina=skill_points_partial,
+        stamina=stamina_points,
         strength=skill_points_partial,
         dexterity=skill_points_partial,
         constitution=skill_points_partial,
@@ -96,8 +97,8 @@ def assign_skill_points(character: DungeonsandtrollsCharacter, api_instance: dnt
         slash_resist=skill_points_partial,
         pierce_resist=skill_points_partial
     )
-    api_instance.dungeons_and_trolls_assign_skill_points(attr)
     print("Assigning " + str(character.skill_points) + " skill points to " + attr.to_str())
+    api_instance.dungeons_and_trolls_assign_skill_points(attr)
     return True
 
 
@@ -151,14 +152,28 @@ def can_character_use_skill(skill_cost: DungeonsandtrollsAttributes,
 
 
 # Select skill that deals any damage.
-def select_skill(items: Iterator[DungeonsandtrollsItem],
+def select_damage_skill(items: Iterator[DungeonsandtrollsItem],
+                 character_attrs: DungeonsandtrollsAttributes) -> DungeonsandtrollsSkill:
+    for item in items:
+        skill: DungeonsandtrollsSkill = None
+        most_damaging_skills = sorted(item.skills, key=(lambda x: compute_damage(x.damage_amount, character_attrs)), reverse=True)
+        for skill in most_damaging_skills:
+            can_use_skill = can_character_use_skill(skill.cost, character_attrs)
+            skill.target: SkillTarget
+            if skill.target != SkillTarget.CHARACTER:
+                can_use_skill = False
+            if can_use_skill:
+                return skill
+    return None
+
+def select_heal_skill(items: Iterator[DungeonsandtrollsItem],
                  character_attrs: DungeonsandtrollsAttributes) -> DungeonsandtrollsSkill:
     for item in items:
         skill: DungeonsandtrollsSkill = None
         for skill in item.skills:
             can_use_skill = can_character_use_skill(skill.cost, character_attrs)
             skill.target: SkillTarget
-            if skill.target != SkillTarget.CHARACTER:
+            if skill.target != SkillTarget.NONE:
                 can_use_skill = False
             if can_use_skill:
                 return skill
@@ -260,12 +275,21 @@ def main():
                 if on_the_same_position(monster_pos, character_pos):
                     # select skill
                     print("selecting a skill to fight with")
-                    skill = select_skill(
+                    skill = select_damage_skill(
                         # filter only MAINHAND items
                         filter(lambda x: x.slot == DungeonsandtrollsItemType.MAINHAND, game.character.equip),
                         game.character.attributes)
                     if not skill:
-                        print("I can't use skill!")
+                        print("I can't use weapon skill, trying body skill")
+                        skill = select_heal_skill(
+                            filter(lambda x: x.slot == DungeonsandtrollsItemType.BODY, game.character.equip),
+                            game.character.attributes)
+                        print("Using body skill: "+skill.name)
+                        try:
+                            api_instance.dungeons_and_trolls_skill(
+                                DungeonsandtrollsSkillUse(skillId=skill.id))
+                        except ApiException as e:
+                            print("Exception when calling DungeonsAndTrollsApi: %s\n" % e)
                         continue
                     skill_damage = compute_damage(skill.damage_amount, game.character.attributes)
                     # fight the monster
