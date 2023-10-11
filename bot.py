@@ -168,14 +168,12 @@ def can_character_use_skill(skill_cost: DungeonsandtrollsAttributes,
 def select_damage_skill(items: Iterator[DungeonsandtrollsItem],
                         character_attrs: DungeonsandtrollsAttributes) -> DungeonsandtrollsSkill:
     for item in items:
-        skill: DungeonsandtrollsSkill = None
         most_damaging_skills = sorted(item.skills, key=(lambda x: compute_damage(x.damage_amount, character_attrs)),
                                       reverse=True)
         for skill in most_damaging_skills:
+            if skill.damage_type != DungeonsandtrollsDamageType.SLASH:
+                continue
             can_use_skill = can_character_use_skill(skill.cost, character_attrs)
-            skill.target: SkillTarget
-            if skill.target != SkillTarget.CHARACTER:
-                can_use_skill = False
             if can_use_skill:
                 return skill
     return None
