@@ -182,12 +182,10 @@ def select_damage_skill(items: Iterator[DungeonsandtrollsItem],
 def select_heal_skill(items: Iterator[DungeonsandtrollsItem],
                       character_attrs: DungeonsandtrollsAttributes) -> DungeonsandtrollsSkill:
     for item in items:
-        skill: DungeonsandtrollsSkill = None
         for skill in item.skills:
+            if skill.damage_type != SkillTarget.NONE:
+                continue
             can_use_skill = can_character_use_skill(skill.cost, character_attrs)
-            skill.target: SkillTarget
-            if skill.target != SkillTarget.NONE:
-                can_use_skill = False
             if can_use_skill:
                 return skill
     return None
