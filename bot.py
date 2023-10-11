@@ -37,20 +37,21 @@ def compute_damage(skill_damage_amount: DungeonsandtrollsAttributes,
 
 
 # Chooses free weapon.
-def choose_best_weapon(weapons: Iterator[DungeonsandtrollsItem], character_attributes: DungeonsandtrollsAttributes,
+def choose_best_item(items: list[DungeonsandtrollsItem], type: DungeonsandtrollsItemType, character_attributes: DungeonsandtrollsAttributes,
                        budget: int) -> DungeonsandtrollsItem:
-    current_weapon = None
+    current_item = None
     print("Budget: " + str(budget))
-    most_expensive_weapons = sorted(list(weapons), key=(lambda x: x.price), reverse=True)
-    for weapon in most_expensive_weapons:
-        weapon: DungeonsandtrollsItem
-        print(weapon.name + " Price: " + str(weapon.price) + " Requirements:" + weapon.requirements.to_str())
-        if attributes_matches(weapon.requirements, character_attributes) and weapon.price < budget:
-            current_weapon = weapon
+    filtered_items = filter(lambda x: x.slot == type, items)
+    most_expensive_items = sorted(list(filtered_items), key=(lambda x: x.price), reverse=True)
+    for item in most_expensive_items:
+        item: DungeonsandtrollsItem
+        #print(weapon.name + " Price: " + str(weapon.price) + " Requirements:" + weapon.requirements.to_str())
+        if attributes_matches(item.requirements, character_attributes) and item.price < budget:
+            current_item = item
             break
-    if current_weapon is not None:
-        print("Buying", current_weapon.name)
-    return current_weapon
+    if current_item is not None:
+        print("Buying "+current_item.name)
+    return current_item
 
 
 def attributes_matches(required: DungeonsandtrollsAttributes, actual: DungeonsandtrollsAttributes) -> bool:
@@ -105,18 +106,30 @@ def select_gear(items: list[DungeonsandtrollsItem],
                 character: DungeonsandtrollsCharacter) -> DungeonsandtrollsIdentifiers:
     gear = DungeonsandtrollsIdentifiers()
     gear.ids = []
-    if len(character.equip) > 0:
+    equiped = set([equip.id for equip in character.equip])
+    if len(equiped) > 0:
         return gear
     print("Selecting gear")
-    equiped = set([equip.id for equip in character.equip])
-    weapons = filter(lambda x: x.slot == DungeonsandtrollsItemType.MAINHAND, items)
-    armor = filter(lambda x: x.slot in {DungeonsandtrollsItemType.BODY,
-                                        DungeonsandtrollsItemType.HEAD,
-                                        DungeonsandtrollsItemType.LEGS,
-                                        DungeonsandtrollsItemType.NECK}, items)
-    # TODO select armor
-    weapon = choose_best_weapon(weapons, character.attributes, character.money)
-    gear.ids = [weapon.id] if weapon and str(weapon.id) not in equiped else []
+    budget = character.money
+    item = choose_best_item(items, DungeonsandtrollsItemType.MAINHAND, character.attributes, budget)
+    if item:
+        gear.ids.append(item.id)
+        budget = budget - item.price
+    item = choose_best_item(items, DungeonsandtrollsItemType.BODY, character.attributes, budget)
+    if item:
+        gear.ids.append(item.id)
+        budget = budget - item.price
+    item = choose_best_item(items, DungeonsandtrollsItemType.HEAD, character.attributes, budget)
+    if item:
+        gear.ids.append(item.id)
+        budget = budget - item.price
+    item = choose_best_item(items, DungeonsandtrollsItemType.LEGS, character.attributes, budget)
+    if item:
+        gear.ids.append(item.id)
+        budget = budget - item.price
+    item = choose_best_item(items, DungeonsandtrollsItemType.NECK, character.attributes, budget)
+    if item:
+        gear.ids.append(item.id)
     return gear
 
 
@@ -211,6 +224,10 @@ def main():
 
                 # buy and equip items
                 maybe_buy_gear(select_gear(game.shop_items, game.character), api_instance)
+
+                #print("respawn")
+                #api_instance.dungeons_and_trolls_respawn({})
+                #continue
 
                 if monster_pos is None:
                     # locate any monster on current level
