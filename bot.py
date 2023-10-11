@@ -5,7 +5,7 @@ from typing import Optional, Union
 import dungeons_and_trolls_client as dnt
 from dotenv import load_dotenv
 from dungeons_and_trolls_client import DungeonsandtrollsPosition, DungeonsandtrollsPlayerSpecificMap, \
-    DungeonsAndTrollsApi
+    DungeonsAndTrollsApi, DungeonsandtrollsDamageType
 from dungeons_and_trolls_client.models.dungeonsandtrolls_attributes import DungeonsandtrollsAttributes
 from dungeons_and_trolls_client.models.dungeonsandtrolls_character import DungeonsandtrollsCharacter
 from dungeons_and_trolls_client.models.dungeonsandtrolls_coordinates import DungeonsandtrollsCoordinates
@@ -41,15 +41,15 @@ def compute_damage(skill_damage_amount: DungeonsandtrollsAttributes,
 # Chooses free weapon.
 def choose_best_item(items: list[DungeonsandtrollsItem], type: DungeonsandtrollsItemType,
                      character_attributes: DungeonsandtrollsAttributes,
-                     budget: int) -> DungeonsandtrollsItem:
+                     budget: int, damage_type: DungeonsandtrollsDamageType) -> DungeonsandtrollsItem:
     current_item = None
     print("Budget: " + str(budget))
     filtered_items = filter(lambda x: x.slot == type, items)
     most_expensive_items = sorted(list(filtered_items), key=(lambda x: x.price), reverse=True)
     for item in most_expensive_items:
         item: DungeonsandtrollsItem
-        # print(weapon.name + " Price: " + str(weapon.price) + " Requirements:" + weapon.requirements.to_str())
-        if attributes_matches(item.requirements, character_attributes) and item.price < budget:
+        if attributes_matches(item.requirements, character_attributes) and item.price < budget and damage_type_matches(
+                item.skills, damage_type):
             current_item = item
             break
     if current_item is not None:
@@ -71,6 +71,15 @@ def attributes_matches(required: DungeonsandtrollsAttributes, actual: Dungeonsan
                                                                           actual.fire_resist) and attribute_matches(
         required.poison_resist, actual.poison_resist) and attribute_matches(required.electric_resist,
                                                                             actual.electric_resist)
+
+
+def damage_type_matches(skills: list[DungeonsandtrollsSkill], damage_type: DungeonsandtrollsDamageType) -> bool:
+    if damage_type is None:
+        return True
+    for skill in skills:
+        if skill.damage_type == damage_type:
+            return True
+    return False
 
 
 def attribute_matches(required: Optional[Union[StrictFloat, StrictInt]],
@@ -115,23 +124,24 @@ def select_gear(items: list[DungeonsandtrollsItem],
         return gear
     print("Selecting gear")
     budget = character.money
-    item = choose_best_item(items, DungeonsandtrollsItemType.MAINHAND, character.attributes, budget)
+    item = choose_best_item(items, DungeonsandtrollsItemType.MAINHAND, character.attributes, budget,
+                            DungeonsandtrollsDamageType.SLASH)
     if item:
         gear.ids.append(item.id)
         budget = budget - item.price
-    item = choose_best_item(items, DungeonsandtrollsItemType.BODY, character.attributes, budget)
+    item = choose_best_item(items, DungeonsandtrollsItemType.BODY, character.attributes, budget, None)
     if item:
         gear.ids.append(item.id)
         budget = budget - item.price
-    item = choose_best_item(items, DungeonsandtrollsItemType.HEAD, character.attributes, budget)
+    item = choose_best_item(items, DungeonsandtrollsItemType.HEAD, character.attributes, budget, None)
     if item:
         gear.ids.append(item.id)
         budget = budget - item.price
-    item = choose_best_item(items, DungeonsandtrollsItemType.LEGS, character.attributes, budget)
+    item = choose_best_item(items, DungeonsandtrollsItemType.LEGS, character.attributes, budget, None)
     if item:
         gear.ids.append(item.id)
         budget = budget - item.price
-    item = choose_best_item(items, DungeonsandtrollsItemType.NECK, character.attributes, budget)
+    item = choose_best_item(items, DungeonsandtrollsItemType.NECK, character.attributes, budget, None)
     if item:
         gear.ids.append(item.id)
     return gear
@@ -317,7 +327,7 @@ def main():
                     # fight the monster
                     print("fighting with " + skill.name + "! Damage dealt: " + str(
                         skill_damage) + " monster life: " + str(monster.life_percentage) + " own life: " + str(
-                        game.character.attributes.life)+" stamina: "+str(game.character.attributes.stamina))
+                        game.character.attributes.life) + " stamina: " + str(game.character.attributes.stamina))
                     try:
                         api_instance.dungeons_and_trolls_skill(
                             DungeonsandtrollsSkillUse(skillId=skill.id, targetId=monster.id))
@@ -327,7 +337,8 @@ def main():
                 else:
                     # refill stamina
                     if game.character.attributes.stamina < game.character.max_attributes.stamina:
-                        print("Regenerating stamina: "+str(game.character.attributes.stamina)+"/"+str(game.character.max_attributes.stamina))
+                        print("Regenerating stamina: " + str(game.character.attributes.stamina) + "/" + str(
+                            game.character.max_attributes.stamina))
                         use_body_skill(game, api_instance)
                         continue
                     # move to the monster
