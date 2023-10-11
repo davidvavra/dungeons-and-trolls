@@ -1,11 +1,12 @@
 import os
+import string
 from collections.abc import Iterator
 from typing import Optional, Union
 
 import dungeons_and_trolls_client as dnt
 from dotenv import load_dotenv
 from dungeons_and_trolls_client import DungeonsandtrollsPosition, DungeonsandtrollsPlayerSpecificMap, \
-    DungeonsAndTrollsApi, DungeonsandtrollsDamageType
+    DungeonsAndTrollsApi, DungeonsandtrollsDamageType, DungeonsandtrollsMessage
 from dungeons_and_trolls_client.models.dungeonsandtrolls_attributes import DungeonsandtrollsAttributes
 from dungeons_and_trolls_client.models.dungeonsandtrolls_character import DungeonsandtrollsCharacter
 from dungeons_and_trolls_client.models.dungeonsandtrolls_coordinates import DungeonsandtrollsCoordinates
@@ -179,11 +180,11 @@ def select_damage_skill(items: Iterator[DungeonsandtrollsItem],
     return None
 
 
-def select_heal_skill(items: Iterator[DungeonsandtrollsItem],
-                      character_attrs: DungeonsandtrollsAttributes) -> DungeonsandtrollsSkill:
+def select_regenerate_skill(items: Iterator[DungeonsandtrollsItem],
+                            character_attrs: DungeonsandtrollsAttributes) -> DungeonsandtrollsSkill:
     for item in items:
         for skill in item.skills:
-            if skill.damage_type != SkillTarget.NONE:
+            if "Rest" not in skill.name:
                 continue
             can_use_skill = can_character_use_skill(skill.cost, character_attrs)
             if can_use_skill:
@@ -251,13 +252,22 @@ def on_the_same_position(a: DungeonsandtrollsCoordinates, b: DungeonsandtrollsCo
 
 
 def use_body_skill(game: DungeonsandtrollsGameState, api_instance: DungeonsAndTrollsApi):
-    skill = select_heal_skill(
+    skill = select_regenerate_skill(
         filter(lambda x: x.slot == DungeonsandtrollsItemType.BODY, game.character.equip),
         game.character.attributes)
     print("Using body skill: " + skill.name)
     try:
         api_instance.dungeons_and_trolls_skill(
             DungeonsandtrollsSkillUse(skillId=skill.id))
+        yell("Regeneration", api_instance)
+    except ApiException as e:
+        print("Exception when calling DungeonsAndTrollsApi: %s\n" % e)
+
+
+def yell(message: string, api_instance: DungeonsAndTrollsApi):
+    try:
+        print(message)
+        api_instance.dungeons_and_trolls_yell(DungeonsandtrollsMessage(text=message))
     except ApiException as e:
         print("Exception when calling DungeonsAndTrollsApi: %s\n" % e)
 
@@ -327,12 +337,13 @@ def main():
                     try:
                         api_instance.dungeons_and_trolls_skill(
                             DungeonsandtrollsSkillUse(skillId=skill.id, targetId=monster.id))
+                        yell("Slash!", api_instance)
                     except ApiException as e:
                         monster, monster_pos = None, None
                         continue
                 else:
-                    # refill stamina
-                    if game.character.attributes.stamina < game.character.max_attributes.stamina:
+                    # refill stamina if not in combat
+                    if game.character.attributes.stamina < game.character.max_attributes.stamina and game.character.last_damage_taken > 2:
                         print("Regenerating stamina: " + str(game.character.attributes.stamina) + "/" + str(
                             game.character.max_attributes.stamina))
                         use_body_skill(game, api_instance)
