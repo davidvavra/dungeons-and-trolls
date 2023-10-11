@@ -4,6 +4,7 @@ from typing import Optional, Union
 
 import dungeons_and_trolls_client as dnt
 from dotenv import load_dotenv
+from dungeons_and_trolls_client import DungeonsandtrollsPosition, DungeonsandtrollsPlayerSpecificMap
 from dungeons_and_trolls_client.models.dungeonsandtrolls_attributes import DungeonsandtrollsAttributes
 from dungeons_and_trolls_client.models.dungeonsandtrolls_character import DungeonsandtrollsCharacter
 from dungeons_and_trolls_client.models.dungeonsandtrolls_coordinates import DungeonsandtrollsCoordinates
@@ -37,20 +38,21 @@ def compute_damage(skill_damage_amount: DungeonsandtrollsAttributes,
 
 
 # Chooses free weapon.
-def choose_best_item(items: list[DungeonsandtrollsItem], type: DungeonsandtrollsItemType, character_attributes: DungeonsandtrollsAttributes,
-                       budget: int) -> DungeonsandtrollsItem:
+def choose_best_item(items: list[DungeonsandtrollsItem], type: DungeonsandtrollsItemType,
+                     character_attributes: DungeonsandtrollsAttributes,
+                     budget: int) -> DungeonsandtrollsItem:
     current_item = None
     print("Budget: " + str(budget))
     filtered_items = filter(lambda x: x.slot == type, items)
     most_expensive_items = sorted(list(filtered_items), key=(lambda x: x.price), reverse=True)
     for item in most_expensive_items:
         item: DungeonsandtrollsItem
-        #print(weapon.name + " Price: " + str(weapon.price) + " Requirements:" + weapon.requirements.to_str())
+        # print(weapon.name + " Price: " + str(weapon.price) + " Requirements:" + weapon.requirements.to_str())
         if attributes_matches(item.requirements, character_attributes) and item.price < budget:
             current_item = item
             break
     if current_item is not None:
-        print("Buying "+current_item.name)
+        print("Buying " + current_item.name)
     return current_item
 
 
@@ -153,10 +155,11 @@ def can_character_use_skill(skill_cost: DungeonsandtrollsAttributes,
 
 # Select skill that deals any damage.
 def select_damage_skill(items: Iterator[DungeonsandtrollsItem],
-                 character_attrs: DungeonsandtrollsAttributes) -> DungeonsandtrollsSkill:
+                        character_attrs: DungeonsandtrollsAttributes) -> DungeonsandtrollsSkill:
     for item in items:
         skill: DungeonsandtrollsSkill = None
-        most_damaging_skills = sorted(item.skills, key=(lambda x: compute_damage(x.damage_amount, character_attrs)), reverse=True)
+        most_damaging_skills = sorted(item.skills, key=(lambda x: compute_damage(x.damage_amount, character_attrs)),
+                                      reverse=True)
         for skill in most_damaging_skills:
             can_use_skill = can_character_use_skill(skill.cost, character_attrs)
             skill.target: SkillTarget
@@ -166,8 +169,9 @@ def select_damage_skill(items: Iterator[DungeonsandtrollsItem],
                 return skill
     return None
 
+
 def select_heal_skill(items: Iterator[DungeonsandtrollsItem],
-                 character_attrs: DungeonsandtrollsAttributes) -> DungeonsandtrollsSkill:
+                      character_attrs: DungeonsandtrollsAttributes) -> DungeonsandtrollsSkill:
     for item in items:
         skill: DungeonsandtrollsSkill = None
         for skill in item.skills:
@@ -188,6 +192,7 @@ def find_stairs_to_next_level(game: DungeonsandtrollsGameState) -> Dungeonsandtr
         if (object.is_stairs):
             return object.position
 
+
 def find_portal(game: DungeonsandtrollsGameState) -> DungeonsandtrollsCoordinates:
     level: DungeonsandtrollsLevel = (game.map.levels[0])
     for object in level.objects:
@@ -199,13 +204,21 @@ def find_portal(game: DungeonsandtrollsGameState) -> DungeonsandtrollsCoordinate
 # Find any monster on the current level.
 def find_monster(game: DungeonsandtrollsGameState) -> (DungeonsandtrollsMonster, DungeonsandtrollsCoordinates):
     level: DungeonsandtrollsLevel = (game.map.levels[0])
-    for obj in level.objects:
+    closest_objects = sorted(level.objects, key=(lambda x: find_distance(x.position, level.player_map)))
+    for obj in closest_objects:
         if not obj.monsters:
             continue
         for monster in obj.monsters:
             monster: DungeonsandtrollsMonster
             return monster, obj.position
     return None, None
+
+
+def find_distance(position: DungeonsandtrollsPosition, map_list: list[DungeonsandtrollsPlayerSpecificMap]) -> int:
+    for mapItem in map_list:
+        if mapItem.position == position:
+            return mapItem.distance
+    return 1000
 
 
 # Update the monster information, e.g. position if the monster moved recently.
@@ -247,9 +260,9 @@ def main():
                 # buy and equip items
                 maybe_buy_gear(select_gear(game.shop_items, game.character), api_instance)
 
-                #print("respawn")
-                #api_instance.dungeons_and_trolls_respawn({})
-                #continue
+                # print("respawn")
+                # api_instance.dungeons_and_trolls_respawn({})
+                # continue
 
                 portal_pos = find_portal(game)
                 if portal_pos is not None:
@@ -284,7 +297,7 @@ def main():
                         skill = select_heal_skill(
                             filter(lambda x: x.slot == DungeonsandtrollsItemType.BODY, game.character.equip),
                             game.character.attributes)
-                        print("Using body skill: "+skill.name)
+                        print("Using body skill: " + skill.name)
                         try:
                             api_instance.dungeons_and_trolls_skill(
                                 DungeonsandtrollsSkillUse(skillId=skill.id))
