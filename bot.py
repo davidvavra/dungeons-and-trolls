@@ -382,6 +382,13 @@ def main():
                     api_instance.dungeons_and_trolls_move(portal_pos)
                     continue
 
+                # refill stamina if not in combat
+                if game.character.attributes.stamina < game.character.max_attributes.stamina and game.character.last_damage_taken > 2:
+                    print("Regenerating stamina: " + str(game.character.attributes.stamina) + "/" + str(
+                        game.character.max_attributes.stamina))
+                    use_body_skill(game, api_instance)
+                    continue
+
                 if monster_pos is None:
                     # locate any monster on current level
                     print("locating monster")
@@ -401,12 +408,6 @@ def main():
                 if on_the_same_position(monster_pos, character_pos):
                     fight(game, api_instance, monster, monster_pos)
                 else:
-                    # refill stamina if not in combat
-                    if game.character.attributes.stamina < game.character.max_attributes.stamina and game.character.last_damage_taken > 2:
-                        print("Regenerating stamina: " + str(game.character.attributes.stamina) + "/" + str(
-                            game.character.max_attributes.stamina))
-                        use_body_skill(game, api_instance)
-                        continue
                     # move to the monster
                     print("moving to monster on pos: " + str(monster_pos) + ", my pos: " + str(character_pos))
                     api_instance.dungeons_and_trolls_move(monster_pos)
