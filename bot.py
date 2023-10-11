@@ -42,7 +42,8 @@ def compute_damage(skill_damage_amount: DungeonsandtrollsAttributes,
 # Chooses free weapon.
 def choose_best_item(items: list[DungeonsandtrollsItem], type: DungeonsandtrollsItemType,
                      character_attributes: DungeonsandtrollsAttributes,
-                     budget: int, damage_type: DungeonsandtrollsDamageType) -> DungeonsandtrollsItem:
+                     budget: int, damage_type: DungeonsandtrollsDamageType,
+                     skill_target: SkillTarget) -> DungeonsandtrollsItem:
     current_item = None
     print("Budget: " + str(budget))
     filtered_items = filter(lambda x: x.slot == type, items)
@@ -50,11 +51,13 @@ def choose_best_item(items: list[DungeonsandtrollsItem], type: Dungeonsandtrolls
     for item in most_expensive_items:
         item: DungeonsandtrollsItem
         if attributes_matches(item.requirements, character_attributes) and item.price < budget and damage_type_matches(
-                item.skills, damage_type):
+                item.skills, damage_type) and skill_target_matches(item.skills, skill_target):
             current_item = item
             break
     if current_item is not None:
         print("Buying " + current_item.name)
+    else:
+        print("No gold left for anything in the shop")
     return current_item
 
 
@@ -79,6 +82,15 @@ def damage_type_matches(skills: list[DungeonsandtrollsSkill], damage_type: Dunge
         return True
     for skill in skills:
         if skill.damage_type == damage_type:
+            return True
+    return False
+
+
+def skill_target_matches(skills: list[DungeonsandtrollsSkill], skill_target: SkillTarget) -> bool:
+    if skill_target is None:
+        return True
+    for skill in skills:
+        if skill.target == skill_target:
             return True
     return False
 
@@ -126,23 +138,23 @@ def select_gear(items: list[DungeonsandtrollsItem],
     print("Selecting gear")
     budget = character.money
     item = choose_best_item(items, DungeonsandtrollsItemType.MAINHAND, character.attributes, budget,
-                            DungeonsandtrollsDamageType.SLASH)
+                            DungeonsandtrollsDamageType.SLASH, SkillTarget.CHARACTER)
     if item:
         gear.ids.append(item.id)
         budget = budget - item.price
-    item = choose_best_item(items, DungeonsandtrollsItemType.BODY, character.attributes, budget, None)
+    item = choose_best_item(items, DungeonsandtrollsItemType.BODY, character.attributes, budget, None, None)
     if item:
         gear.ids.append(item.id)
         budget = budget - item.price
-    item = choose_best_item(items, DungeonsandtrollsItemType.HEAD, character.attributes, budget, None)
+    item = choose_best_item(items, DungeonsandtrollsItemType.LEGS, character.attributes, budget, None, None)
     if item:
         gear.ids.append(item.id)
         budget = budget - item.price
-    item = choose_best_item(items, DungeonsandtrollsItemType.LEGS, character.attributes, budget, None)
+    item = choose_best_item(items, DungeonsandtrollsItemType.HEAD, character.attributes, budget, None, None)
     if item:
         gear.ids.append(item.id)
         budget = budget - item.price
-    item = choose_best_item(items, DungeonsandtrollsItemType.NECK, character.attributes, budget, None)
+    item = choose_best_item(items, DungeonsandtrollsItemType.NECK, character.attributes, budget, None, None)
     if item:
         gear.ids.append(item.id)
     return gear
@@ -173,6 +185,8 @@ def select_damage_skill(items: Iterator[DungeonsandtrollsItem],
                                       reverse=True)
         for skill in most_damaging_skills:
             if skill.damage_type != DungeonsandtrollsDamageType.SLASH:
+                continue
+            if skill.target != SkillTarget.CHARACTER:
                 continue
             can_use_skill = can_character_use_skill(skill.cost, character_attrs)
             if can_use_skill:
@@ -272,6 +286,37 @@ def yell(message: string, api_instance: DungeonsAndTrollsApi):
         print("Exception when calling DungeonsAndTrollsApi: %s\n" % e)
 
 
+def fight(game: DungeonsandtrollsGameState, api_instance: DungeonsAndTrollsApi, monster: DungeonsandtrollsMonster,
+          monster_pos: DungeonsandtrollsCoordinates):
+    # select skill
+    print("selecting a skill to fight with")
+    skill = select_damage_skill(
+        # filter only MAINHAND items
+        filter(lambda x: x.slot == DungeonsandtrollsItemType.MAINHAND, game.character.equip),
+        game.character.attributes)
+    if not skill:
+        print("I can't use weapon skill")
+        return
+    skill_damage = compute_damage(skill.damage_amount, game.character.attributes)
+    # fight the monster
+    print("fighting with " + skill.name + "! damage: " + str(
+        skill_damage) + " monster life: " + str(monster.life_percentage) + " own life: " + str(
+        game.character.attributes.life) + " stamina: " + str(game.character.attributes.stamina))
+    try:
+        if skill.target == SkillTarget.NONE:
+            api_instance.dungeons_and_trolls_skill(DungeonsandtrollsSkillUse(skillId=skill.id))
+        if skill.target == SkillTarget.CHARACTER:
+            api_instance.dungeons_and_trolls_skill(DungeonsandtrollsSkillUse(skillId=skill.id, targetId=monster.id))
+        if skill.target == SkillTarget.POSITION:
+            api_instance.dungeons_and_trolls_skill(DungeonsandtrollsSkillUse(skillId=skill.id,
+                                                                             position=DungeonsandtrollsPosition(
+                                                                                 position_x=monster_pos.position_x,
+                                                                                 position_y=monster_pos.position_y)))
+        yell("Slash!", api_instance)
+    except ApiException as e:
+        print("Exception when calling DungeonsAndTrollsApi: %s\n" % e)
+
+
 def main():
     # Enter a context with an instance of the API client
     with dnt.ApiClient(configuration) as api_client:
@@ -319,28 +364,7 @@ def main():
 
                 character_pos: DungeonsandtrollsCoordinates = game.current_position
                 if on_the_same_position(monster_pos, character_pos):
-                    # select skill
-                    print("selecting a skill to fight with")
-                    skill = select_damage_skill(
-                        # filter only MAINHAND items
-                        filter(lambda x: x.slot == DungeonsandtrollsItemType.MAINHAND, game.character.equip),
-                        game.character.attributes)
-                    if not skill:
-                        print("I can't use weapon skill, trying body skill")
-                        use_body_skill(game, api_instance)
-                        continue
-                    skill_damage = compute_damage(skill.damage_amount, game.character.attributes)
-                    # fight the monster
-                    print("fighting with " + skill.name + "! Damage dealt: " + str(
-                        skill_damage) + " monster life: " + str(monster.life_percentage) + " own life: " + str(
-                        game.character.attributes.life) + " stamina: " + str(game.character.attributes.stamina))
-                    try:
-                        api_instance.dungeons_and_trolls_skill(
-                            DungeonsandtrollsSkillUse(skillId=skill.id, targetId=monster.id))
-                        yell("Slash!", api_instance)
-                    except ApiException as e:
-                        monster, monster_pos = None, None
-                        continue
+                    fight(game, api_instance, monster, monster_pos)
                 else:
                     # refill stamina if not in combat
                     if game.character.attributes.stamina < game.character.max_attributes.stamina and game.character.last_damage_taken > 2:
