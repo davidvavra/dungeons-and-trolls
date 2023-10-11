@@ -4,7 +4,8 @@ from typing import Optional, Union
 
 import dungeons_and_trolls_client as dnt
 from dotenv import load_dotenv
-from dungeons_and_trolls_client import DungeonsandtrollsPosition, DungeonsandtrollsPlayerSpecificMap
+from dungeons_and_trolls_client import DungeonsandtrollsPosition, DungeonsandtrollsPlayerSpecificMap, \
+    DungeonsAndTrollsApi
 from dungeons_and_trolls_client.models.dungeonsandtrolls_attributes import DungeonsandtrollsAttributes
 from dungeons_and_trolls_client.models.dungeonsandtrolls_character import DungeonsandtrollsCharacter
 from dungeons_and_trolls_client.models.dungeonsandtrolls_coordinates import DungeonsandtrollsCoordinates
@@ -193,12 +194,16 @@ def find_stairs_to_next_level(game: DungeonsandtrollsGameState) -> Dungeonsandtr
             return object.position
 
 
-def find_portal(game: DungeonsandtrollsGameState) -> DungeonsandtrollsCoordinates:
+def find_max_portal(game: DungeonsandtrollsGameState) -> DungeonsandtrollsCoordinates:
     level: DungeonsandtrollsLevel = (game.map.levels[0])
+    portals = []
     for object in level.objects:
         object: DungeonsandtrollsMapObjects
         if (object.portal):
-            return object.position
+            portals.append((object.portal, object.position))
+    if len(portals) > 0:
+        maxPortal = max(portals, key=lambda x: x[0].destination_floor)
+        return maxPortal[1]
 
 
 # Find any monster on the current level.
@@ -239,6 +244,18 @@ def on_the_same_position(a: DungeonsandtrollsCoordinates, b: DungeonsandtrollsCo
     return a.position_x == b.position_x and a.position_y == b.position_y
 
 
+def use_body_skill(game: DungeonsandtrollsGameState, api_instance: DungeonsAndTrollsApi):
+    skill = select_heal_skill(
+        filter(lambda x: x.slot == DungeonsandtrollsItemType.BODY, game.character.equip),
+        game.character.attributes)
+    print("Using body skill: " + skill.name)
+    try:
+        api_instance.dungeons_and_trolls_skill(
+            DungeonsandtrollsSkillUse(skillId=skill.id))
+    except ApiException as e:
+        print("Exception when calling DungeonsAndTrollsApi: %s\n" % e)
+
+
 def main():
     # Enter a context with an instance of the API client
     with dnt.ApiClient(configuration) as api_client:
@@ -264,7 +281,7 @@ def main():
                 # api_instance.dungeons_and_trolls_respawn({})
                 # continue
 
-                portal_pos = find_portal(game)
+                portal_pos = find_max_portal(game)
                 if portal_pos is not None:
                     api_instance.dungeons_and_trolls_move(portal_pos)
                     continue
@@ -294,15 +311,7 @@ def main():
                         game.character.attributes)
                     if not skill:
                         print("I can't use weapon skill, trying body skill")
-                        skill = select_heal_skill(
-                            filter(lambda x: x.slot == DungeonsandtrollsItemType.BODY, game.character.equip),
-                            game.character.attributes)
-                        print("Using body skill: " + skill.name)
-                        try:
-                            api_instance.dungeons_and_trolls_skill(
-                                DungeonsandtrollsSkillUse(skillId=skill.id))
-                        except ApiException as e:
-                            print("Exception when calling DungeonsAndTrollsApi: %s\n" % e)
+                        use_body_skill(game, api_instance)
                         continue
                     skill_damage = compute_damage(skill.damage_amount, game.character.attributes)
                     # fight the monster
