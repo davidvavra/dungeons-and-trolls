@@ -39,6 +39,46 @@ def compute_damage(skill_damage_amount: DungeonsandtrollsAttributes,
                 if weapon_val])
 
 
+def wait_at_stairs_for_others(
+        api_instance: dnt.DungeonsAndTrollsApi,
+        game: DungeonsandtrollsGameState,
+        stairs: DungeonsandtrollsCoordinates
+) -> bool:  # return True if I should move or false if wait
+    current_coords = DungeonsandtrollsCoordinates(
+        position_x=game.current_position.position_x,
+        position_y=game.current_position.position_y
+    )
+    if distance(current_coords, stairs) > 2:
+        return True
+
+    print("Near the stairs, looking at others")
+    level: DungeonsandtrollsLevel = (game.map.levels[0])
+    players = []
+    for obj in level.objects:
+        players.extend(obj.players)
+
+    max_dist = 0
+    most_distant_player = None
+    for player in players:
+        if player.id == game.character.id:
+            continue
+
+        dist = distance(stairs, player.coordinates)
+        if dist > max_dist and dist > 2:
+            max_dist = dist
+            most_distant_player = player
+    if most_distant_player is not None:
+        print("Waiting at stairs at " + most_distant_player.name)
+        move(api_instance, game.current_position)
+        yell(f"Hurry up, {most_distant_player.name}", api_instance)
+        return False
+    return True
+
+
+def distance(a: DungeonsandtrollsCoordinates, b: DungeonsandtrollsCoordinates):
+    return abs(a.position_x - b.position_x) + abs(a.position_y - b.position_y)
+
+
 def attribute_boosts_damage(attributes: DungeonsandtrollsAttributes, damage_multiplicator: string):
     if damage_multiplicator is None:
         return True
@@ -178,6 +218,11 @@ def select_gear(items: list[DungeonsandtrollsItem],
         gear.ids.append(item.id)
         budget = budget - item.price
     item = choose_best_item(items, DungeonsandtrollsItemType.BODY, character.attributes, budget, None, None,
+                            damage_multiplicator)
+    if item:
+        gear.ids.append(item.id)
+        budget = budget - item.price
+    item = choose_best_item(items, DungeonsandtrollsItemType.OFFHAND, character.attributes, budget, None, None,
                             damage_multiplicator)
     if item:
         gear.ids.append(item.id)
@@ -356,6 +401,20 @@ def fight(game: DungeonsandtrollsGameState, api_instance: DungeonsAndTrollsApi, 
         print("Exception when calling DungeonsAndTrollsApi: %s\n" % e)
 
 
+last_move = None
+
+
+def move(api_instance: DungeonsAndTrollsApi, position: DungeonsandtrollsPosition):
+    try:
+        global last_move
+        if last_move == position:
+            print("Ignoring move")
+        api_instance.dungeons_and_trolls_move(position)
+        last_move = position
+    except ApiException as e:
+        print("Exception when calling DungeonsAndTrollsApi: %s\n" % e)
+
+
 def main():
     # Enter a context with an instance of the API client
     with dnt.ApiClient(configuration) as api_client:
@@ -383,7 +442,8 @@ def main():
 
                 portal_pos = find_max_portal(game)
                 if portal_pos is not None:
-                    api_instance.dungeons_and_trolls_move(portal_pos)
+                    print("Going to portal")
+                    move(api_instance, portal_pos)
                     continue
 
                 # refill stamina if not in combat
@@ -399,8 +459,11 @@ def main():
                     monster, monster_pos = find_monster(game)
 
                     if monster is None:
-                        print("no monster on level, moving to stairs")
-                        api_instance.dungeons_and_trolls_move(find_stairs_to_next_level(game))
+                        stairs = find_stairs_to_next_level(game)
+                        should_not_wait = wait_at_stairs_for_others(api_instance, game, stairs)
+                        if should_not_wait:
+                            print("no monster on level, moving to stairs")
+                            move(api_instance, stairs)
                         continue
                 else:
                     # update information for existing monster
@@ -414,7 +477,7 @@ def main():
                 else:
                     # move to the monster
                     print("moving to monster on pos: " + str(monster_pos) + ", my pos: " + str(character_pos))
-                    api_instance.dungeons_and_trolls_move(monster_pos)
+                    move(api_instance, monster_pos)
 
             except ApiException as e:
                 print("Exception when calling DungeonsAndTrollsApi: %s\n" % e)
