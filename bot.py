@@ -317,7 +317,7 @@ def main():
                     # fight the monster
                     print("fighting with " + skill.name + "! Damage dealt: " + str(
                         skill_damage) + " monster life: " + str(monster.life_percentage) + " own life: " + str(
-                        game.character.attributes.life))
+                        game.character.attributes.life)+" stamina: "+str(game.character.attributes.stamina))
                     try:
                         api_instance.dungeons_and_trolls_skill(
                             DungeonsandtrollsSkillUse(skillId=skill.id, targetId=monster.id))
@@ -325,6 +325,11 @@ def main():
                         monster, monster_pos = None, None
                         continue
                 else:
+                    # refill stamina
+                    if game.character.attributes.stamina < game.character.max_attributes.stamina:
+                        print("Regenerating stamina: "+str(game.character.attributes.stamina)+"/"+str(game.character.max_attributes.stamina))
+                        use_body_skill(game, api_instance)
+                        continue
                     # move to the monster
                     print("moving to monster on pos: " + str(monster_pos) + ", my pos: " + str(character_pos))
                     api_instance.dungeons_and_trolls_move(monster_pos)
