@@ -214,16 +214,15 @@ def attribute_matches(required: Optional[Union[StrictFloat, StrictInt]],
 def assign_skill_points(character: DungeonsandtrollsCharacter, api_instance: dnt.DungeonsAndTrollsApi) -> bool:
     if character.skill_points == 0:
         return False
-    print("Assigning skill points")
-    skill_points_partial = character.skill_points / 10
-    rest = character.skill_points - (skill_points_partial * 2)
-    main_points = rest / 3
+    print("Assigning skill points: "+str(character.skill_points))
+    skill_points_partial = 5
+    rest = character.skill_points - 5*3
+    # main_points = rest / 3
     attr: DungeonsandtrollsAttributes = DungeonsandtrollsAttributes(
-        stamina=main_points,
-        life=main_points,
-        strength=main_points,
+        strength=rest,
         slash_resist=skill_points_partial,
-        pierce_resist=skill_points_partial
+        pierce_resist=skill_points_partial,
+        fire_resist=skill_points_partial
     )
     print("Assigning " + str(character.skill_points) + " skill points to " + attr.to_str())
     api_instance.dungeons_and_trolls_assign_skill_points(attr)
