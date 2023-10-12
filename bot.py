@@ -284,6 +284,8 @@ def select_gear(items: list[DungeonsandtrollsItem],
         return gear
     print("Selecting gear")
     budget = character.money
+    # character will have at least strength 50 with all items
+    character.attributes.strength = 50
     # choose slashing main weapon
     item = choose_best_item(items, DungeonsandtrollsItemType.MAINHAND, character.attributes, budget,
                             DungeonsandtrollsDamageType.SLASH, SkillTarget.CHARACTER, None)
