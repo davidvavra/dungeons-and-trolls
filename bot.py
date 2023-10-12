@@ -227,14 +227,17 @@ def calculate_damage_multiplicator(damage_amount: DungeonsandtrollsAttributes) -
             return key
 
 
-def choose_healing_item(items: list[DungeonsandtrollsItem], budget: int, character_attributes: DungeonsandtrollsAttributes):
+def choose_healing_item(items: list[DungeonsandtrollsItem], budget: int,
+                        character_attributes: DungeonsandtrollsAttributes):
     current_item = None
     print("Budget: " + str(budget))
     sorted_items = sorted(list(items), key=(lambda x: x.price), reverse=True)
     for item in sorted_items:
         item: DungeonsandtrollsItem
-        if attributes_matches(item.requirements, character_attributes) and target_effect_attribute_matches(item.skills, "life") and cost_matches(item.skills,
-                                                                                 "stamina") and item.slot != DungeonsandtrollsItemType.BODY and item.slot != DungeonsandtrollsItemType.MAINHAND and item.price < budget:
+        if attributes_matches(item.requirements, character_attributes) and target_effect_attribute_matches(item.skills,
+                                                                                                           "life") and cost_matches(
+            item.skills,
+            "stamina") and item.slot != DungeonsandtrollsItemType.BODY and item.slot != DungeonsandtrollsItemType.MAINHAND and item.price < budget:
             current_item = item
             break
     if current_item is not None:
@@ -549,6 +552,19 @@ def charge_if_in_range(api_instance: DungeonsAndTrollsApi, monster_pos: Dungeons
         return False
 
 
+previous_equip = []
+
+
+def print_skills(equip: list[DungeonsandtrollsItem]):
+    global previous_equip
+    if previous_equip != equip:
+        print("New skills:")
+        for item in equip:
+            for skill in item.skills:
+                print(item.name + ": " + skill.name)
+        previous_equip = equip
+
+
 def main():
     # Enter a context with an instance of the API client
     with dnt.ApiClient(configuration) as api_client:
@@ -569,6 +585,7 @@ def main():
 
                 # buy and equip items
                 maybe_buy_gear(select_gear(game.shop_items, game.character), api_instance)
+                print_skills(game.character.equip)
 
                 # print("respawn")
                 # api_instance.dungeons_and_trolls_respawn({})
