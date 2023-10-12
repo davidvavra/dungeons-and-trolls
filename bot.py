@@ -416,7 +416,7 @@ def find_max_portal(game: DungeonsandtrollsGameState) -> DungeonsandtrollsCoordi
     portals = []
     for object in level.objects:
         object: DungeonsandtrollsMapObjects
-        if (object.portal):
+        if object.portal and level.level == 0:
             portals.append((object.portal, object.position))
     if len(portals) > 0:
         maxPortal = max(portals, key=lambda x: x[0].destination_floor)
