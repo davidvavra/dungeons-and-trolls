@@ -269,29 +269,33 @@ def select_gear(items: list[DungeonsandtrollsItem],
     if item:
         gear.ids.append(item.id)
         budget = budget - item.price
-    item = choose_healing_item(items, budget)
-    if item:
-        gear.ids.append(item.id)
-        budget = budget - item.price
-    item = choose_best_item(items, DungeonsandtrollsItemType.OFFHAND, character.attributes, budget, None, None,
+    healing_item = choose_healing_item(items, budget)
+    if healing_item:
+        gear.ids.append(healing_item.id)
+        budget = budget - healing_item.price
+    if healing_item and healing_item.slot != DungeonsandtrollsItemType.OFFHAND:
+        item = choose_best_item(items, DungeonsandtrollsItemType.OFFHAND, character.attributes, budget, None, None,
                             damage_multiplicator)
-    if item:
-        gear.ids.append(item.id)
-        budget = budget - item.price
-    item = choose_best_item(items, DungeonsandtrollsItemType.LEGS, character.attributes, budget, None, None,
-                            damage_multiplicator)
-    if item:
-        gear.ids.append(item.id)
-        budget = budget - item.price
-    item = choose_best_item(items, DungeonsandtrollsItemType.HEAD, character.attributes, budget, None, None,
-                            damage_multiplicator)
-    if item:
-        gear.ids.append(item.id)
-        budget = budget - item.price
-    item = choose_best_item(items, DungeonsandtrollsItemType.NECK, character.attributes, budget, None, None,
-                            damage_multiplicator)
-    if item:
-        gear.ids.append(item.id)
+        if item:
+            gear.ids.append(item.id)
+            budget = budget - item.price
+    if healing_item and healing_item.slot != DungeonsandtrollsItemType.LEGS:
+        item = choose_best_item(items, DungeonsandtrollsItemType.LEGS, character.attributes, budget, None, None,
+                                damage_multiplicator)
+        if item:
+            gear.ids.append(item.id)
+            budget = budget - item.price
+    if healing_item and healing_item.slot != DungeonsandtrollsItemType.HEAD:
+        item = choose_best_item(items, DungeonsandtrollsItemType.HEAD, character.attributes, budget, None, None,
+                                damage_multiplicator)
+        if item:
+            gear.ids.append(item.id)
+            budget = budget - item.price
+    if healing_item and healing_item.slot != DungeonsandtrollsItemType.NECK:
+        item = choose_best_item(items, DungeonsandtrollsItemType.NECK, character.attributes, budget, None, None,
+                                damage_multiplicator)
+        if item:
+            gear.ids.append(item.id)
     return gear
 
 
@@ -451,7 +455,7 @@ def use_healing_skill(game: DungeonsandtrollsGameState, api_instance: DungeonsAn
 def yell(message: string, api_instance: DungeonsAndTrollsApi):
     try:
         print("Yell: " + message)
-        api_instance.dungeons_and_trolls_yell(DungeonsandtrollsMessage(text=message))
+        api_instance.dungeons_and_trolls_yell(DungeonsandtrollsMessage(text=message), blocking=False, async_req=True)
     except ApiException as e:
         print("Exception when calling DungeonsAndTrollsApi: %s\n" % e)
 
