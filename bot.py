@@ -132,7 +132,7 @@ def choose_best_item(items: list[DungeonsandtrollsItem], type: Dungeonsandtrolls
             current_item = item
             break
     if current_item is not None:
-        print("Buying " + current_item.name + " boosting " + current_item.attributes.to_str())
+        print("Buying item: " + current_item.name)
     else:
         print("Can't buy anything")
     return current_item
@@ -227,18 +227,18 @@ def calculate_damage_multiplicator(damage_amount: DungeonsandtrollsAttributes) -
             return key
 
 
-def choose_healing_item(items: list[DungeonsandtrollsItem], budget: int):
+def choose_healing_item(items: list[DungeonsandtrollsItem], budget: int, character_attributes: DungeonsandtrollsAttributes):
     current_item = None
     print("Budget: " + str(budget))
     sorted_items = sorted(list(items), key=(lambda x: x.price), reverse=True)
     for item in sorted_items:
         item: DungeonsandtrollsItem
-        if target_effect_attribute_matches(item.skills, "life") and cost_matches(item.skills,
+        if attributes_matches(item.requirements, character_attributes) and target_effect_attribute_matches(item.skills, "life") and cost_matches(item.skills,
                                                                                  "stamina") and item.slot != DungeonsandtrollsItemType.BODY and item.slot != DungeonsandtrollsItemType.MAINHAND and item.price < budget:
             current_item = item
             break
     if current_item is not None:
-        print("Buying " + current_item.name + " healing")
+        print("Buying healing item: " + current_item.name)
     else:
         print("Can't buy anything healing")
     return current_item
@@ -270,7 +270,7 @@ def select_gear(items: list[DungeonsandtrollsItem],
     if item:
         gear.ids.append(item.id)
         budget = budget - item.price
-    healing_item = choose_healing_item(items, budget)
+    healing_item = choose_healing_item(items, budget, character.attributes)
     if healing_item:
         gear.ids.append(healing_item.id)
         budget = budget - healing_item.price
@@ -515,7 +515,8 @@ def move(api_instance: DungeonsAndTrollsApi, position: DungeonsandtrollsPosition
         print("Exception when calling DungeonsAndTrollsApi: %s\n" % e)
 
 
-def charge_if_in_range(api_instance: DungeonsAndTrollsApi, monster_pos: DungeonsandtrollsCoordinates, monster: DungeonsandtrollsMonster,
+def charge_if_in_range(api_instance: DungeonsAndTrollsApi, monster_pos: DungeonsandtrollsCoordinates,
+                       monster: DungeonsandtrollsMonster,
                        game: DungeonsandtrollsGameState):
     distance = None
     line_of_sight = False
@@ -537,7 +538,7 @@ def charge_if_in_range(api_instance: DungeonsAndTrollsApi, monster_pos: Dungeons
         return False
     if distance > range:
         return False
-    print("Using charge: " + charge_skill.name+" "+monster.name)
+    print("Using charge: " + charge_skill.name + " " + monster.name)
     try:
         api_instance.dungeons_and_trolls_skill(
             DungeonsandtrollsSkillUse(skillId=charge_skill.id, targetId=monster.id))
