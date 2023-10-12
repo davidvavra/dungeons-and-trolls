@@ -181,6 +181,15 @@ def cost_matches(skills: list[DungeonsandtrollsSkill], attr: string) -> bool:
     return False
 
 
+def caster_effect_flag_matches(skills: list[DungeonsandtrollsSkill], attr: string) -> bool:
+    if attr is None:
+        return True
+    for skill in skills:
+        if skill.caster_effects.flags.to_dict().get(attr):
+            return True
+    return False
+
+
 def skill_target_matches(skills: list[DungeonsandtrollsSkill], skill_target: SkillTarget) -> bool:
     if skill_target is None:
         return True
@@ -228,20 +237,39 @@ def calculate_damage_multiplicator(damage_amount: DungeonsandtrollsAttributes) -
 
 
 def choose_healing_item(items: list[DungeonsandtrollsItem], budget: int,
-                        character_attributes: DungeonsandtrollsAttributes):
+                        character_attributes: DungeonsandtrollsAttributes, slots: list[DungeonsandtrollsItemType]):
     current_item = None
     print("Budget: " + str(budget))
-    sorted_items = sorted(list(items), key=(lambda x: x.price), reverse=True)
+    sorted_items = sorted(list(items), key=(lambda x: x.price))
     for item in sorted_items:
         item: DungeonsandtrollsItem
         if attributes_matches(item.requirements, character_attributes) and target_effect_attribute_matches(item.skills,
                                                                                                            "life") and cost_matches(
             item.skills,
-            "stamina") and item.slot != DungeonsandtrollsItemType.BODY and item.slot != DungeonsandtrollsItemType.MAINHAND and item.price < budget:
+            "stamina") and item.slot != DungeonsandtrollsItemType.BODY and item.slot != DungeonsandtrollsItemType.MAINHAND and item.price < budget and item.slot in slots:
             current_item = item
             break
     if current_item is not None:
         print("Buying healing item: " + current_item.name)
+    else:
+        print("Can't buy anything healing")
+    return current_item
+
+
+def choose_charge_item(items: list[DungeonsandtrollsItem], budget: int,
+                       character_attributes: DungeonsandtrollsAttributes, slots: list[DungeonsandtrollsItemType]):
+    current_item = None
+    print("Budget: " + str(budget))
+    sorted_items = sorted(list(items), key=(lambda x: x.price))
+    for item in sorted_items:
+        item: DungeonsandtrollsItem
+        if attributes_matches(item.requirements, character_attributes) and caster_effect_flag_matches(item.skills,
+                                                                                                      "movement") is True and skill_target_matches(
+            item.skills, SkillTarget.CHARACTER) and item.price < budget and item.slot in slots:
+            current_item = item
+            break
+    if current_item is not None:
+        print("Buying charge item: " + current_item.name)
     else:
         print("Can't buy anything healing")
     return current_item
@@ -256,6 +284,7 @@ def select_gear(items: list[DungeonsandtrollsItem],
         return gear
     print("Selecting gear")
     budget = character.money
+    # choose slashing main weapon
     item = choose_best_item(items, DungeonsandtrollsItemType.MAINHAND, character.attributes, budget,
                             DungeonsandtrollsDamageType.SLASH, SkillTarget.CHARACTER, None)
     best_skill = select_damage_skill([item], character.attributes)
@@ -268,38 +297,31 @@ def select_gear(items: list[DungeonsandtrollsItem],
     if item:
         gear.ids.append(item.id)
         budget = budget - item.price
-    item = choose_best_item(items, DungeonsandtrollsItemType.BODY, character.attributes, budget, None, None,
-                            damage_multiplicator)
-    if item:
-        gear.ids.append(item.id)
-        budget = budget - item.price
-    healing_item = choose_healing_item(items, budget, character.attributes)
+
+    slots = [DungeonsandtrollsItemType.BODY, DungeonsandtrollsItemType.OFFHAND, DungeonsandtrollsItemType.HEAD,
+             DungeonsandtrollsItemType.NECK, DungeonsandtrollsItemType.LEGS]
+
+    # choose charge item
+    charge_item = choose_charge_item(items, budget, character.attributes, slots)
+    if charge_item:
+        slots.remove(charge_item.slot)
+        gear.ids.append(charge_item.id)
+        budget = budget - charge_item.price
+
+    # choose healing item
+    healing_item = choose_healing_item(items, budget, character.attributes, slots)
     if healing_item:
+        slots.remove(healing_item.slot)
         gear.ids.append(healing_item.id)
         budget = budget - healing_item.price
-    if healing_item and healing_item.slot != DungeonsandtrollsItemType.OFFHAND:
-        item = choose_best_item(items, DungeonsandtrollsItemType.OFFHAND, character.attributes, budget, None, None,
+
+    # choose other items in empty slots which boost the main weapon
+    for slot in slots:
+        item = choose_best_item(items, slot, character.attributes, budget, None, None,
                                 damage_multiplicator)
         if item:
             gear.ids.append(item.id)
             budget = budget - item.price
-    if healing_item and healing_item.slot != DungeonsandtrollsItemType.LEGS:
-        item = choose_best_item(items, DungeonsandtrollsItemType.LEGS, character.attributes, budget, None, None,
-                                damage_multiplicator)
-        if item:
-            gear.ids.append(item.id)
-            budget = budget - item.price
-    if healing_item and healing_item.slot != DungeonsandtrollsItemType.HEAD:
-        item = choose_best_item(items, DungeonsandtrollsItemType.HEAD, character.attributes, budget, None, None,
-                                damage_multiplicator)
-        if item:
-            gear.ids.append(item.id)
-            budget = budget - item.price
-    if healing_item and healing_item.slot != DungeonsandtrollsItemType.NECK:
-        item = choose_best_item(items, DungeonsandtrollsItemType.NECK, character.attributes, budget, None, None,
-                                damage_multiplicator)
-        if item:
-            gear.ids.append(item.id)
     return gear
 
 
@@ -484,10 +506,7 @@ def fight(game: DungeonsandtrollsGameState, api_instance: DungeonsAndTrollsApi, 
           monster_pos: DungeonsandtrollsCoordinates):
     # select skill
     print("selecting a skill to fight with")
-    skill = select_damage_skill(
-        # filter only MAINHAND items
-        filter(lambda x: x.slot == DungeonsandtrollsItemType.MAINHAND, game.character.equip),
-        game.character.attributes)
+    skill = select_damage_skill(game.character.equip, game.character.attributes)
     if not skill:
         print("I can't use weapon skill")
         return
@@ -538,6 +557,8 @@ def charge_if_in_range(api_instance: DungeonsAndTrollsApi, monster_pos: Dungeons
         return False
     range = compute_damage(charge_skill.range, game.character.attributes)
     if range <= 1:
+        return False
+    if distance <= 1:
         return False
     if distance > range:
         return False
