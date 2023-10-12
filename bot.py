@@ -233,7 +233,8 @@ def choose_healing_item(items: list[DungeonsandtrollsItem], budget: int):
     sorted_items = sorted(list(items), key=(lambda x: x.price), reverse=True)
     for item in sorted_items:
         item: DungeonsandtrollsItem
-        if target_effect_attribute_matches(item.skills, "life") and cost_matches(item.skills, "stamina") and item.slot != DungeonsandtrollsItemType.BODY and item.slot != DungeonsandtrollsItemType.MAINHAND and item.price < budget:
+        if target_effect_attribute_matches(item.skills, "life") and cost_matches(item.skills,
+                                                                                 "stamina") and item.slot != DungeonsandtrollsItemType.BODY and item.slot != DungeonsandtrollsItemType.MAINHAND and item.price < budget:
             current_item = item
             break
     if current_item is not None:
@@ -275,7 +276,7 @@ def select_gear(items: list[DungeonsandtrollsItem],
         budget = budget - healing_item.price
     if healing_item and healing_item.slot != DungeonsandtrollsItemType.OFFHAND:
         item = choose_best_item(items, DungeonsandtrollsItemType.OFFHAND, character.attributes, budget, None, None,
-                            damage_multiplicator)
+                                damage_multiplicator)
         if item:
             gear.ids.append(item.id)
             budget = budget - item.price
@@ -319,20 +320,20 @@ def can_character_use_skill(skill_cost: DungeonsandtrollsAttributes,
 # Select skill that deals any damage.
 def select_damage_skill(items: Iterator[DungeonsandtrollsItem],
                         character_attrs: DungeonsandtrollsAttributes) -> DungeonsandtrollsSkill:
+    skills = []
     for item in items:
-        most_damaging_skills = sorted(item.skills, key=(lambda x: compute_damage(x.damage_amount, character_attrs)),
-                                      reverse=True)
-        for skill in most_damaging_skills:
+        for skill in item.skills:
             if skill.damage_type != DungeonsandtrollsDamageType.SLASH:
-                print("Not slash: " + str(skill.damage_type))
                 continue
             if skill.target != SkillTarget.CHARACTER:
-                print("Not character: " + str(skill.target))
                 continue
             can_use_skill = can_character_use_skill(skill.cost, character_attrs)
             if can_use_skill:
-                return skill
-    return None
+                skills.append(skill)
+    if len(skills) == 0:
+        return None
+    best_skill = max(skills, key=lambda x: compute_damage(x.damage_amount, character_attrs))
+    return best_skill
 
 
 def select_regenerate_stamina_skill(items: Iterator[DungeonsandtrollsItem],
@@ -357,6 +358,22 @@ def select_regenerate_life_skill(items: Iterator[DungeonsandtrollsItem],
             if can_use_skill:
                 return skill
     return None
+
+
+def select_charge_skill(items: Iterator[DungeonsandtrollsItem],
+                        character_attrs: DungeonsandtrollsAttributes) -> DungeonsandtrollsSkill:
+    skills = []
+    for item in items:
+        for skill in item.skills:
+            if not (skill.caster_effects.flags.movement is True and skill.target == SkillTarget.CHARACTER):
+                continue
+            can_use_skill = can_character_use_skill(skill.cost, character_attrs)
+            if can_use_skill:
+                skills.append(skill)
+    if len(skills) == 0:
+        return None
+    best_skill = max(skills, key=lambda x: compute_damage(x.range, character_attrs))
+    return best_skill
 
 
 # Search for a tile with stairs on it.
@@ -498,6 +515,39 @@ def move(api_instance: DungeonsAndTrollsApi, position: DungeonsandtrollsPosition
         print("Exception when calling DungeonsAndTrollsApi: %s\n" % e)
 
 
+def charge_if_in_range(api_instance: DungeonsAndTrollsApi, monster_pos: DungeonsandtrollsCoordinates, monster: DungeonsandtrollsMonster,
+                       game: DungeonsandtrollsGameState):
+    distance = None
+    line_of_sight = False
+    for mapItem in game.map.levels[0].player_map:
+        if mapItem.position == monster_pos and mapItem.distance >= 0:
+            distance = mapItem.distance
+            line_of_sight = mapItem.line_of_sight
+    if not distance:
+        return False
+    if distance < 1:
+        return False
+    if not line_of_sight:
+        return False
+    charge_skill = select_charge_skill(game.character.equip, game.character.attributes)
+    if not charge_skill:
+        return False
+    range = compute_damage(charge_skill.range, game.character.attributes)
+    if range <= 1:
+        return False
+    if distance > range:
+        return False
+    print("Using charge: " + charge_skill.name+" "+monster.name)
+    try:
+        api_instance.dungeons_and_trolls_skill(
+            DungeonsandtrollsSkillUse(skillId=charge_skill.id, targetId=monster.id))
+        yell("Charge!", api_instance)
+        return True
+    except ApiException as e:
+        print("Exception when calling DungeonsAndTrollsApi: %s\n" % e)
+        return False
+
+
 def main():
     # Enter a context with an instance of the API client
     with dnt.ApiClient(configuration) as api_client:
@@ -566,9 +616,12 @@ def main():
                 if on_the_same_position(monster_pos, character_pos):
                     fight(game, api_instance, monster, monster_pos)
                 else:
-                    # move to the monster
-                    print("moving to monster on pos: " + str(monster_pos) + ", my pos: " + str(character_pos))
-                    move(api_instance, monster_pos)
+                    # charge to monster if in range
+                    charged = charge_if_in_range(api_instance, monster_pos, monster, game)
+                    if not charged:
+                        # move to the monster
+                        print("moving to monster on pos: " + str(monster_pos) + ", my pos: " + str(character_pos))
+                        move(api_instance, monster_pos)
 
             except ApiException as e:
                 print("Exception when calling DungeonsAndTrollsApi: %s\n" % e)
