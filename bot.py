@@ -97,6 +97,16 @@ def attribute_boost_value(attributes: DungeonsandtrollsAttributes, damage_multip
         return -1
 
 
+def attribute_damage_amount_value(skills: list[DungeonsandtrollsSkill], attr: string) -> int:
+    if attr is None:
+        return -1
+    for skill in skills:
+        if skill.damage_amount.to_dict()[attr]:
+            return skill.damage_amount.to_dict()[attr]
+    else:
+        return -1
+
+
 def choose_best_item(items: list[DungeonsandtrollsItem], type: DungeonsandtrollsItemType,
                      character_attributes: DungeonsandtrollsAttributes, budget: int,
                      damage_type: DungeonsandtrollsDamageType, skill_target: SkillTarget,
@@ -106,7 +116,9 @@ def choose_best_item(items: list[DungeonsandtrollsItem], type: Dungeonsandtrolls
     filtered_items = filter(lambda x: x.slot == type, items)
     sorted_items = filtered_items
     if damage_multiplicator is None:
-        sorted_items = sorted(list(filtered_items), key=(lambda x: x.price), reverse=True)
+        sorted_items = sorted(list(filtered_items),
+                              key=(lambda x: attribute_damage_amount_value(x.skills, damage_multiplicator)),
+                              reverse=True)
     else:
         sorted_items = sorted(list(filtered_items),
                               key=(lambda x: attribute_boost_value(x.attributes, damage_multiplicator)),
@@ -151,6 +163,24 @@ def damage_type_matches(skills: list[DungeonsandtrollsSkill], damage_type: Dunge
     return False
 
 
+def target_effect_attribute_matches(skills: list[DungeonsandtrollsSkill], attr: string) -> bool:
+    if attr is None:
+        return True
+    for skill in skills:
+        if skill.target_effects.attributes.to_dict().get(attr):
+            return True
+    return False
+
+
+def cost_matches(skills: list[DungeonsandtrollsSkill], attr: string) -> bool:
+    if attr is None:
+        return True
+    for skill in skills:
+        if skill.cost.to_dict().get(attr):
+            return True
+    return False
+
+
 def skill_target_matches(skills: list[DungeonsandtrollsSkill], skill_target: SkillTarget) -> bool:
     if skill_target is None:
         return True
@@ -178,10 +208,11 @@ def assign_skill_points(character: DungeonsandtrollsCharacter, api_instance: dnt
     print("Assigning skill points")
     skill_points_partial = character.skill_points / 10
     rest = character.skill_points - (skill_points_partial * 2)
-    main_points = rest / 2
+    main_points = rest / 3
     attr: DungeonsandtrollsAttributes = DungeonsandtrollsAttributes(
         stamina=main_points,
         life=main_points,
+        strength=main_points,
         slash_resist=skill_points_partial,
         pierce_resist=skill_points_partial
     )
@@ -194,6 +225,22 @@ def calculate_damage_multiplicator(damage_amount: DungeonsandtrollsAttributes) -
     for key in damage_amount.to_dict().keys():
         if damage_amount.to_dict()[key]:
             return key
+
+
+def choose_healing_item(items: list[DungeonsandtrollsItem], budget: int):
+    current_item = None
+    print("Budget: " + str(budget))
+    sorted_items = sorted(list(items), key=(lambda x: x.price), reverse=True)
+    for item in sorted_items:
+        item: DungeonsandtrollsItem
+        if target_effect_attribute_matches(item.skills, "life") and cost_matches(item.skills, "stamina") and item.slot != DungeonsandtrollsItemType.BODY and item.slot != DungeonsandtrollsItemType.MAINHAND and item.price < budget:
+            current_item = item
+            break
+    if current_item is not None:
+        print("Buying " + current_item.name + " healing")
+    else:
+        print("Can't buy anything healing")
+    return current_item
 
 
 def select_gear(items: list[DungeonsandtrollsItem],
@@ -219,6 +266,10 @@ def select_gear(items: list[DungeonsandtrollsItem],
         budget = budget - item.price
     item = choose_best_item(items, DungeonsandtrollsItemType.BODY, character.attributes, budget, None, None,
                             damage_multiplicator)
+    if item:
+        gear.ids.append(item.id)
+        budget = budget - item.price
+    item = choose_healing_item(items, budget)
     if item:
         gear.ids.append(item.id)
         budget = budget - item.price
@@ -269,8 +320,10 @@ def select_damage_skill(items: Iterator[DungeonsandtrollsItem],
                                       reverse=True)
         for skill in most_damaging_skills:
             if skill.damage_type != DungeonsandtrollsDamageType.SLASH:
+                print("Not slash: " + str(skill.damage_type))
                 continue
             if skill.target != SkillTarget.CHARACTER:
+                print("Not character: " + str(skill.target))
                 continue
             can_use_skill = can_character_use_skill(skill.cost, character_attrs)
             if can_use_skill:
@@ -278,11 +331,23 @@ def select_damage_skill(items: Iterator[DungeonsandtrollsItem],
     return None
 
 
-def select_regenerate_skill(items: Iterator[DungeonsandtrollsItem],
-                            character_attrs: DungeonsandtrollsAttributes) -> DungeonsandtrollsSkill:
+def select_regenerate_stamina_skill(items: Iterator[DungeonsandtrollsItem],
+                                    character_attrs: DungeonsandtrollsAttributes) -> DungeonsandtrollsSkill:
     for item in items:
         for skill in item.skills:
-            if "Rest" not in skill.name:
+            if not skill.caster_effects.attributes.stamina:
+                continue
+            can_use_skill = can_character_use_skill(skill.cost, character_attrs)
+            if can_use_skill:
+                return skill
+    return None
+
+
+def select_regenerate_life_skill(items: Iterator[DungeonsandtrollsItem],
+                                 character_attrs: DungeonsandtrollsAttributes) -> DungeonsandtrollsSkill:
+    for item in items:
+        for skill in item.skills:
+            if not (skill.target_effects.attributes.life and skill.cost.stamina):
                 continue
             can_use_skill = can_character_use_skill(skill.cost, character_attrs)
             if can_use_skill:
@@ -353,17 +418,34 @@ def on_the_same_position(a: DungeonsandtrollsCoordinates, b: DungeonsandtrollsCo
     return a.position_x == b.position_x and a.position_y == b.position_y
 
 
-def use_body_skill(game: DungeonsandtrollsGameState, api_instance: DungeonsAndTrollsApi):
-    skill = select_regenerate_skill(
+def use_stamina_skill(game: DungeonsandtrollsGameState, api_instance: DungeonsAndTrollsApi):
+    skill = select_regenerate_stamina_skill(
         filter(lambda x: x.slot == DungeonsandtrollsItemType.BODY, game.character.equip),
         game.character.attributes)
     print("Using body skill: " + skill.name)
     try:
         api_instance.dungeons_and_trolls_skill(
             DungeonsandtrollsSkillUse(skillId=skill.id))
-        yell("Regeneration", api_instance)
+        yell("Resting", api_instance)
     except ApiException as e:
         print("Exception when calling DungeonsAndTrollsApi: %s\n" % e)
+
+
+def use_healing_skill(game: DungeonsandtrollsGameState, api_instance: DungeonsAndTrollsApi):
+    skill = select_regenerate_life_skill(
+        game.character.equip,
+        game.character.attributes)
+    if skill:
+        print("Using healing skill: " + skill.name)
+        try:
+            api_instance.dungeons_and_trolls_skill(
+                DungeonsandtrollsSkillUse(skillId=skill.id, targetId=game.character.id))
+            yell("Healing", api_instance)
+        except ApiException as e:
+            print("Exception when calling DungeonsAndTrollsApi: %s\n" % e)
+        return True
+    else:
+        return False
 
 
 def yell(message: string, api_instance: DungeonsAndTrollsApi):
@@ -447,8 +529,16 @@ def main():
                 if game.character.attributes.stamina < game.character.max_attributes.stamina and game.character.last_damage_taken > 2:
                     print("Regenerating stamina: " + str(game.character.attributes.stamina) + "/" + str(
                         game.character.max_attributes.stamina))
-                    use_body_skill(game, api_instance)
+                    use_stamina_skill(game, api_instance)
                     continue
+
+                # heal if not in combat
+                if game.character.attributes.life < game.character.max_attributes.life and game.character.last_damage_taken > 2:
+                    used = use_healing_skill(game, api_instance)
+                    if used:
+                        print("Regenerating life: " + str(game.character.attributes.life) + "/" + str(
+                            game.character.max_attributes.life))
+                        continue
 
                 if monster_pos is None:
                     # locate any monster on current level
